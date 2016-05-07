@@ -1,27 +1,14 @@
 from pymongo import MongoClient
 import datetime
-
-def insertoMongo( item, dbName ):
-    client=MongoClient()
-    if(dbName == "Mashable"):
-        db=client.mashable
-    elif(dbName == "The Next Web"):
-        db=client.thenextweb
-    else:
-        db=client.test_database
-    test = db.feed
-    test.insert_one(item)
-    return
-
 from bs4 import BeautifulSoup
 from urllib2 import urlopen
 
-def scrap(url, db):
-    #url = "http://feeds.mashable.com/Mashable"
+def parseMashable(url):
     html = urlopen(url).read()
     soup = BeautifulSoup(html, "lxml")
     items = soup.find_all("item")
 
+    client = MongoClient()
     for idx in items: 
         title = idx.title.string
         date = idx.pubdate.string
@@ -29,27 +16,54 @@ def scrap(url, db):
         desc = str(idx.description)
         media = idx.media
         creator = idx.find("dc:creator").string
-        rawCategories = idx.find_all("category")
-        categories = []
-
-        for val in rawCategories:
-            categories.append(val.string)
-        if(checkItemExistsInDB(title) == False):
-            print "Inserting:%s" % title
-            insertoMongo({"title": title, "url": url, "description": desc, "media":media, "creator": creator, "categories": categories}, db)
-        else:
-            print "Item exists in db"
+        
+        if(client.mashable.feed.find({"title": title}).count() == 0):
+            item = {"title": title, "url": url, "description": desc, "media":media, "creator": creator}
+            client.mashable.feed.insert_one(item)
+            print "[Mashable]Added: %s" % title
 
     return
 
-def checkItemExistsInDB( key ):
-    client=MongoClient()
-    db=client.mashable
-    res = db.feed.find({"title": key})
-    if(res.count() > 0):
-        return True
-    else:
-        return False
+def parseMilliyet(url):
+    
+    html = urlopen(url).read()
+    soup = BeautifulSoup(html, "lxml")
+    items = soup.find_all("item")
 
-scrap("http://feeds.mashable.com/Mashable", "Mashable")
-scrap("http://feeds2.feedburner.com/thenextweb", "The Next Web")
+    client = MongoClient()
+    for i in items:
+        title = i.title.string
+        date = i.pubdate.string
+        url = i.guid.string
+        description = str(i.description)    
+        
+        if(client.milliyet.gundem.find({"title": title}).count() == 0):
+            item = {"title": title, "date": date, "url":url, "description": description}
+            client.milliyet.gundem.insert_one(item)
+            print "[Milliyet]Added: %s" % title
+    return
+
+
+def parseNTV(url):
+    
+    html = urlopen(url).read()
+    soup = BeautifulSoup(html, "lxml")
+    items = soup.find_all("entry")
+
+    client = MongoClient()
+    for i in items:
+        title = i.title.string
+        date = i.published.string
+        url = i.id.string
+        description = str(i.content)    
+
+        if(client.ntv.gundem.find({"title": title}).count() == 0):
+            item = {"title": title, "date": date, "url":url, "description": description}
+            client.ntv.gundem.insert_one(item)
+            print "[NTV]Added: %s" % title
+    return
+
+
+parseMashable("http://feeds.mashable.com/Mashable")
+parseMilliyet("http://www.milliyet.com.tr/rss/rssNew/gundemRss.xml")
+parseNTV("http://www.ntv.com.tr/gundem.rss")
